@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/samber/lo"
 )
@@ -11,42 +12,50 @@ import (
  2. Any live cell with two or three live neighbours lives on to the next generation.
  3. Any live cell with more than three live neighbours dies, as if by overpopulation.
  4. Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
-
-|-----|
-|x| | |
-|x|x| |
-| | | |
-|-----|
-
 */
 
 func main() {
-	world := NewWorld([]Point{
-		{1, 3},
-		{3, 3},
-		{3, 2},
-		{6, 2},
-		{6, 6},
+	midpoint := 40 / 2
+	world := NewWorld([]Cell{
+		{midpoint, midpoint - 1},
+		{midpoint, midpoint},
+		{midpoint, midpoint + 1},
+		{midpoint - 1, midpoint},
+		{midpoint + 1, midpoint + 1},
 	})
-	world.print()
+
+	for {
+
+		fmt.Print("\033[H\033[2J")
+		world.print()
+		time.Sleep(200 * time.Millisecond)
+		world.tick()
+
+	}
+
 }
 
-type Point struct {
+type Cell struct {
 	x, y int
 }
 
 type World struct {
-	liveCells []Point
+	minX, maxX, minY, maxY int
+	liveCells              []Cell
 }
 
-func NewWorld(seed []Point) *World {
+func NewWorld(seed []Cell) *World {
 	return &World{
+		minX:      0,
+		maxX:      40,
+		minY:      0,
+		maxY:      40,
 		liveCells: seed,
 	}
 }
 
-func (w *World) isCellAlive(cell Point) bool {
-	_, found := lo.Find(w.liveCells, func(x Point) bool {
+func (w *World) isCellAlive(cell Cell) bool {
+	_, found := lo.Find(w.liveCells, func(x Cell) bool {
 		return x == cell
 	})
 	return found
@@ -54,19 +63,17 @@ func (w *World) isCellAlive(cell Point) bool {
 
 func (w *World) print() {
 	// TODO: update this to work when dimensions go into the negative
-	rows, cols := w.getDimensions()
-	fmt.Printf("rows: %d ; cols: %d\n", rows, cols)
 	fmt.Printf("  ")
-	for col := 1; col < cols+1; col++ {
-		fmt.Printf("%d", col)
+	for col := w.minY; col < w.maxY; col++ {
+		// fmt.Printf("%d", col)
 	}
 	fmt.Println()
-	for row := 1; row < rows+1; row++ {
-		fmt.Printf("%02d", row)
-		for col := 1; col < cols+1; col++ {
+	for row := w.minX; row < w.maxX; row++ {
+		// fmt.Printf("%02d", row)
+		for col := w.minY; col < w.maxY; col++ {
 			var cell string
-			if w.isCellAlive(Point{row, col}) {
-				cell = "■"
+			if w.isCellAlive(Cell{row, col}) {
+				cell = "😃"
 			} else {
 				cell = " "
 			}
@@ -78,22 +85,53 @@ func (w *World) print() {
 	}
 }
 
-func (w *World) getDimensions() (rows, cols int) {
-	maxX := lo.MaxBy(w.liveCells, func(cell Point, max Point) bool {
-		return cell.x > max.x
-	})
-	maxY := lo.MaxBy(w.liveCells, func(cell Point, max Point) bool {
-		return cell.y > max.y
-	})
-	rows = maxY.y
-	cols = maxX.x
-	return
+func (w *World) countLiveNeighbors(cell Cell) int {
+	x := cell.x
+	y := cell.y
+	// n
+	ns := []Cell{
+		{x, y - 1},
+		{x - 1, y - 1},
+		{x - 1, y},
+		{x - 1, y + 1},
+		{x, y + 1},
+		{x + 1, y + 1},
+		{x + 1, y},
+		{x + 1, y - 1},
+	}
+	count := 0
+	for _, n := range ns {
+		if w.isCellAlive(n) {
+			count++
+		}
+	}
+	return count
 }
 
 func (w *World) tick() {
-	// get the dimensions
-	// new dims are old+1 in each direction
 	// for each cell in the new dim, check against the rules to find if its alive or dead:
-	// check if alive - one ruleset; if dead, another
-	// discard old world, put in the new one.
+	newCells := []Cell{}
+	for x := w.minX; x < w.maxX; x++ {
+		for y := w.minY; y < w.maxY; y++ {
+			liveNeighbourCount := w.countLiveNeighbors(Cell{x, y})
+			if w.isCellAlive(Cell{x, y}) {
+				if liveNeighbourCount == 2 || liveNeighbourCount == 3 {
+					newCells = append(newCells, Cell{x, y}) // TODO do not duplicate
+				}
+			} else {
+				if liveNeighbourCount == 3 {
+					newCells = append(newCells, Cell{x, y})
+				}
+			}
+		}
+
+	}
+	w.liveCells = newCells
 }
+
+/*
+ 1. Any live cell with fewer than two live neighbours dies, as if by underpopulation.
+ 2. Any live cell with two or three live neighbours lives on to the next generation.
+ 3. Any live cell with more than three live neighbours dies, as if by overpopulation.
+ 4. Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+*/
